@@ -525,7 +525,7 @@ async function exportPdf(days) {
       const keyW = 32;
 
       const lines = wrapText(doc, v, leftColW - keyW - 2);
-      const rowH = Math.max(4, lines.length * 4);
+      const rowH = Math.max(5, lines.length * 5) + 3;
 
       if (detailsY + rowH > pageH - margin - 6) {
         doc.addPage();
@@ -534,8 +534,10 @@ async function exportPdf(days) {
       }
 
       doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
       doc.text(key, leftColX, detailsY);
       doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
       doc.text(lines, leftColX + keyW, detailsY);
       detailsY += rowH;
       maxY = Math.max(maxY, detailsY);
