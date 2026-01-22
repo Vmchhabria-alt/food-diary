@@ -502,8 +502,6 @@ async function exportPdf(days) {
 
     const rows = [
       ["Dish & Components", e.dishComponents],
-      ["Fullness Before", e.fullnessBefore ? String(e.fullnessBefore) : ""],
-      ["Fullness After", e.fullnessAfter ? String(e.fullnessAfter) : ""],
       ["Place", e.place],
       ["Eating Disorder Behaviors", e.edBehaviors],
       ["Feelings or Emotions", e.feelings],
@@ -519,13 +517,10 @@ async function exportPdf(days) {
     let detailsY = y;
     let maxY = y;
 
-    // Render details on the left
+    // Render details on the left - field name on one line, value on next
     for (const [k, v] of rows) {
-      const key = `${k}:`;
-      const keyW = 32;
-
-      const lines = wrapText(doc, v, leftColW - keyW - 2);
-      const rowH = Math.max(5, lines.length * 5) + 3;
+      const lines = wrapText(doc, v, leftColW);
+      const rowH = 5 + Math.max(4, lines.length * 4);
 
       if (detailsY + rowH > pageH - margin - 6) {
         doc.addPage();
@@ -534,12 +529,40 @@ async function exportPdf(days) {
       }
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.text(key, leftColX, detailsY);
+      doc.setFontSize(9);
+      doc.text(k + ":", leftColX, detailsY);
+      detailsY += 4;
+      
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text(lines, leftColX + keyW, detailsY);
-      detailsY += rowH;
+      doc.setFontSize(9);
+      doc.text(lines, leftColX, detailsY);
+      detailsY += Math.max(4, lines.length * 4);
+      maxY = Math.max(maxY, detailsY);
+    }
+
+    // Add fullness scales side by side
+    const fullnessRows = [];
+    if (e.fullnessBefore) fullnessRows.push(["Fullness Before", String(e.fullnessBefore)]);
+    if (e.fullnessAfter) fullnessRows.push(["Fullness After", String(e.fullnessAfter)]);
+    
+    if (fullnessRows.length > 0) {
+      const colW = leftColW / 2;
+      let fullX = leftColX;
+      const fullY = detailsY;
+      
+      for (const [k, v] of fullnessRows) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text(k + ":", fullX, fullY);
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text(v, fullX, fullY + 4);
+        
+        fullX += colW;
+      }
+      
+      detailsY += 12;
       maxY = Math.max(maxY, detailsY);
     }
 
