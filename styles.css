@@ -4,7 +4,7 @@
   --muted:#78716c;
   --text:#292524;
   --border:#e7e5e4;
-  --primary:#16a34a;
+  --primary:#1e3a8a;
   --primaryText:#ffffff;
   --accent:#ea580c;
   --accentLight:#fef3c7;
@@ -23,9 +23,9 @@ body{
   position:sticky;
   top:0;
   padding:14px 16px;
-  background:linear-gradient(135deg, #16a34a 0%, #059669 100%);
+  background:linear-gradient(135deg, #1e3a8a 0%, #0f2944 100%);
   backdrop-filter:saturate(140%) blur(12px);
-  border-bottom:3px solid #15803d;
+  border-bottom:3px solid #0d1b2a;
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -42,6 +42,15 @@ body{
   text-shadow:0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.subtitle{
+  font-size:11px;
+  font-weight:400;
+  font-style:italic;
+  color:rgba(255, 255, 255, 0.8);
+  letter-spacing:0.1px;
+  margin-top:2px;
+}
+
 .container{
   padding:14px 14px 86px;
   max-width:760px;
@@ -53,7 +62,7 @@ body{
   padding:18px;
   border:2px dashed var(--primary);
   border-radius:14px;
-  background:linear-gradient(135deg, rgba(22, 163, 74, 0.04) 0%, rgba(5, 150, 105, 0.04) 100%);
+  background:linear-gradient(135deg, rgba(30, 58, 138, 0.04) 0%, rgba(15, 41, 68, 0.04) 100%);
   text-align:center;
   font-weight:500;
 }
@@ -70,6 +79,35 @@ body{
   padding:8px 0;
   border-bottom:2px solid var(--primary);
   display:inline-block;
+  cursor:pointer;
+  user-select:none;
+  transition:all 0.2s;
+}
+
+.dayHeader::before{
+  content:"▶ ";
+  display:inline-block;
+  transition:transform 0.2s;
+  margin-right:4px;
+}
+
+.dayHeader.expanded::before{
+  transform:rotate(90deg);
+}
+
+.dayHeader:hover{
+  color:#0f2944;
+  border-bottom-color:#0f2944;
+}
+
+.dayEntries{
+  max-height:5000px;
+  overflow:hidden;
+  transition:max-height 0.3s ease-out;
+}
+
+.dayEntries.collapsed{
+  max-height:0;
 }
 
 .card{
@@ -119,7 +157,7 @@ body{
 }
 
 .cardActionBtn:hover{
-  background:rgba(22, 163, 74, 0.1);
+  background:rgba(30, 58, 138, 0.1);
   border-color:var(--primary);
 }
 
@@ -206,8 +244,8 @@ button{
 }
 
 .primary:hover{
-  background:#15803d;
-  box-shadow:0 4px 6px rgba(22, 163, 74, 0.2);
+  background:#0d1b2a;
+  box-shadow:0 4px 6px rgba(30, 58, 138, 0.2);
 }
 
 .secondary{
@@ -217,7 +255,7 @@ button{
 }
 
 .secondary:hover{
-  background:rgba(22, 163, 74, 0.08);
+  background:rgba(30, 58, 138, 0.08);
 }
 
 .iconBtn{
@@ -263,7 +301,7 @@ button{
 .formTitle{
   font-size:16px;
   font-weight:800;
-  background:linear-gradient(135deg, #16a34a 0%, #059669 100%);
+  background:linear-gradient(135deg, #1e3a8a 0%, #0f2944 100%);
   -webkit-background-clip:text;
   -webkit-text-fill-color:transparent;
   background-clip:text;
