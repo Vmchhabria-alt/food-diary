@@ -43,6 +43,7 @@ const els = {
 let dbPromise;
 let currentPhotoFiles = []; // File objects kept until Save
 let currentEditingId = null; // Track if editing an existing entry
+let expandedDayKey = null; // Track which day group is expanded
 
 function setStatus(msg) {
   els.status.textContent = msg || "";
@@ -243,8 +244,26 @@ async function refreshList() {
   const groups = groupByDay(entries);
   for (const g of groups) {
     const groupEl = el("div", { class: "dayGroup" });
-    groupEl.appendChild(el("div", { class: "dayHeader", text: prettyDayHeader(g.dayKey) }));
-    for (const entry of g.items) groupEl.appendChild(renderEntryCard(entry));
+    const isExpanded = expandedDayKey === g.dayKey;
+    
+    const header = el("div", { 
+      class: "dayHeader" + (isExpanded ? " expanded" : ""),
+      text: prettyDayHeader(g.dayKey),
+      onClick: () => {
+        if (expandedDayKey === g.dayKey) {
+          expandedDayKey = null;
+        } else {
+          expandedDayKey = g.dayKey;
+        }
+        refreshList();
+      }
+    });
+    groupEl.appendChild(header);
+    
+    const entriesContainer = el("div", { class: "dayEntries" + (isExpanded ? "" : " collapsed") });
+    for (const entry of g.items) entriesContainer.appendChild(renderEntryCard(entry));
+    groupEl.appendChild(entriesContainer);
+    
     els.entries.appendChild(groupEl);
   }
 }
@@ -267,7 +286,9 @@ function resetForm() {
 function showPhotoPreview() {
   els.photoPreview.innerHTML = "";
   currentPhotoFiles.forEach((file, idx) => {
-    const url = URL.createObjectURL(file);
+    // Handle both File objects and stored photo objects with { blob, type }
+    const blobToUse = file.blob || file;
+    const url = URL.createObjectURL(blobToUse);
     const chip = document.createElement("div");
     chip.className = "photoChip";
 
@@ -489,46 +510,68 @@ async function exportPdf(days) {
       ["Comments", e.comments]
     ].filter(r => String(r[1] || "").trim().length);
 
+    // Layout: left column for details, right columns for photos horizontally
+    const leftColW = 70;
+    const leftColX = margin;
+    const rightColX = margin + leftColW + 3;
+    const rightColW = pageW - rightColX - margin;
+    
+    let detailsY = y;
+    let maxY = y;
+
+    // Render details on the left
     for (const [k, v] of rows) {
       const key = `${k}:`;
-      const keyW = 45;
+      const keyW = 32;
 
-      const lines = wrapText(doc, v, contentW - keyW);
-      if (y + lines.length * 4 > pageH - margin - 6) {
+      const lines = wrapText(doc, v, leftColW - keyW - 2);
+      const rowH = Math.max(4, lines.length * 4);
+
+      if (detailsY + rowH > pageH - margin - 6) {
         doc.addPage();
-        y = margin;
+        detailsY = margin;
+        maxY = margin;
       }
 
       doc.setFont("helvetica", "bold");
-      doc.text(key, margin, y);
+      doc.text(key, leftColX, detailsY);
       doc.setFont("helvetica", "normal");
-      doc.text(lines, margin + keyW, y);
-      y += Math.max(4, lines.length * 4);
+      doc.text(lines, leftColX + keyW, detailsY);
+      detailsY += rowH;
+      maxY = Math.max(maxY, detailsY);
     }
 
+    // Render photos on the right, arranged horizontally
     if (e.photos && e.photos.length) {
+      const photosStartY = y;
+      const maxPhotoH = 45;
+      let photoX = rightColX;
+      
       for (const p of e.photos) {
         const dataUrl = await blobToJpegDataUrl(p.blob);
         const imgProps = doc.getImageProperties(dataUrl);
 
-        const maxImgW = contentW;
-        const maxImgH = 70;
-        const ratio = Math.min(maxImgW / imgProps.width, maxImgH / imgProps.height);
+        const ratio = Math.min(rightColW / (e.photos.length * imgProps.width), maxPhotoH / imgProps.height);
 
         const iw = imgProps.width * ratio;
         const ih = imgProps.height * ratio;
 
-        if (y + ih > pageH - margin) {
+        // Check if we need a new page
+        if (photoX + iw > pageW - margin) {
           doc.addPage();
-          y = margin;
+          photoX = rightColX;
+          detailsY = margin;
+          maxY = margin;
+          detailsY = y;
         }
 
-        doc.addImage(dataUrl, "JPEG", margin, y, iw, ih);
-        y += ih + 4;
+        doc.addImage(dataUrl, "JPEG", photoX, photosStartY, iw, ih);
+        photoX += iw + 2;
+        maxY = Math.max(maxY, photosStartY + ih);
       }
     }
 
-    y += 4;
+    y = maxY + 4;
     if (y > pageH - margin - 10) {
       doc.addPage();
       y = margin;
@@ -564,8 +607,22 @@ function wireEvents() {
 
   els.photos.addEventListener("change", () => {
     const files = Array.from(els.photos.files || []);
+    const MAX_PHOTOS = 3;
+    const remainingSlots = MAX_PHOTOS - currentPhotoFiles.length;
+    
+    if (remainingSlots <= 0) {
+      setStatus(`Maximum of ${MAX_PHOTOS} photos per entry`);
+      els.photos.value = "";
+      return;
+    }
+    
+    const filesToAdd = files.slice(0, remainingSlots);
+    if (files.length > remainingSlots) {
+      setStatus(`Only ${remainingSlots} photo(s) can be added. Max is ${MAX_PHOTOS} per entry.`);
+    }
+    
     // Append to allow multiple selections in separate picks
-    currentPhotoFiles = currentPhotoFiles.concat(files);
+    currentPhotoFiles = currentPhotoFiles.concat(filesToAdd);
     showPhotoPreview();
     els.photos.value = "";
   });
