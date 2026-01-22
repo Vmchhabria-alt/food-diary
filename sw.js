@@ -1,4 +1,4 @@
-const CACHE = "foodDiaryCacheV5";
+const CACHE = "foodDiaryCacheV6";
 const ASSETS = [
   "./",
   "./index.html",
