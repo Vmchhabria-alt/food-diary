@@ -81,6 +81,15 @@ function formatPretty(dt) {
   return `${wd} ${mo} ${day}${suff} ${hours}:${minutes} ${ampm}`;
 }
 
+function formatTime(dt) {
+  let hours = dt.getHours();
+  const minutes = pad2(dt.getMinutes());
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+  return `${hours}:${minutes} ${ampm}`;
+}
+
 function toDatetimeLocalValue(dt) {
   const y = dt.getFullYear();
   const m = pad2(dt.getMonth() + 1);
@@ -163,28 +172,57 @@ function el(tag, attrs = {}, children = []) {
 
 function renderEntryCard(entry) {
   const dt = new Date(entry.capturedAt);
+  const titleText = `${entry.mealName || "Meal"} @ ${formatTime(dt)}`;
 
   const card = el("div", { class: "card" });
   const top = el("div", { class: "cardTop" }, [
-    el("div", { class: "cardTitle", text: entry.mealName || "Meal" }),
-    el("div", { class: "cardTime", text: formatPretty(dt) })
+    el("div", { class: "cardTitle", text: titleText })
   ]);
 
-  // Add action buttons
-  const actions = el("div", { class: "cardActions" }, [
-    el("button", {
-      class: "cardActionBtn editBtn",
-      text: "Edit",
-      type: "button",
-      onClick: () => openEntryDialogForEdit(entry)
-    }),
-    el("button", {
-      class: "cardActionBtn deleteBtn",
-      text: "Delete",
-      type: "button",
-      onClick: () => deleteEntry(entry.id)
-    })
-  ]);
+  // Add action buttons (duplicate, edit, delete)
+  const actions = el("div", { class: "cardActions" });
+
+  const dupBtn = el("button", {
+    class: "cardActionBtn duplicateBtn",
+    type: "button",
+    "aria-label": "Duplicate",
+    onClick: () => duplicateEntry(entry)
+  });
+  dupBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="5" y="7" width="12" height="12" rx="2"></rect>
+      <rect x="9" y="3" width="12" height="12" rx="2"></rect>
+    </svg>`;
+  actions.appendChild(dupBtn);
+
+  const editBtn = el("button", {
+    class: "cardActionBtn editBtn",
+    type: "button",
+    "aria-label": "Edit",
+    onClick: () => openEntryDialogForEdit(entry)
+  });
+  editBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 20h4l11-11c.6-.6.6-1.6 0-2.2l-1.8-1.8c-.6-.6-1.6-.6-2.2 0L4 16v4z"></path>
+      <path d="M13.5 6.5l4 4"></path>
+    </svg>`;
+  actions.appendChild(editBtn);
+
+  const delBtn = el("button", {
+    class: "cardActionBtn deleteBtn",
+    type: "button",
+    "aria-label": "Delete",
+    onClick: () => deleteEntry(entry.id)
+  });
+  delBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 7h12"></path>
+      <path d="M9 7V5c0-.6.4-1 1-1h4c.6 0 1 .4 1 1v2"></path>
+      <path d="M10 11v6"></path>
+      <path d="M14 11v6"></path>
+      <path d="M7 7l1 12c.1.6.6 1 1.2 1h5.6c.6 0 1.1-.4 1.2-1l1-12"></path>
+    </svg>`;
+  actions.appendChild(delBtn);
   top.appendChild(actions);
 
   const meta = el("div", { class: "meta" });
@@ -205,7 +243,7 @@ function renderEntryCard(entry) {
   addRow("Fullness Before", entry.fullnessBefore ? `${entry.fullnessBefore}` : "");
   addRow("Fullness After", entry.fullnessAfter ? `${entry.fullnessAfter}` : "");
   addRow("Place", entry.place);
-  addRow("Eating Disorder Behaviors", entry.edBehaviors);
+  addRow("ED Behaviors", entry.edBehaviors);
   addRow("Feelings or Emotions", entry.feelings);
   addRow("Comments", entry.comments);
 
@@ -216,10 +254,8 @@ function renderEntryCard(entry) {
   if (entry.photos && entry.photos.length) {
     const row = el("div", { class: "thumbRow" });
     for (const p of entry.photos) {
-      const url = URL.createObjectURL(p.blob);
       const img = el("img", { class: "thumb" });
-      img.src = url;
-      img.onload = () => URL.revokeObjectURL(url);
+      img.src = p.data;
       row.appendChild(img);
     }
     card.appendChild(row);
@@ -235,13 +271,18 @@ async function refreshList() {
 
   els.entries.innerHTML = "";
 
+  let groups;
   if (!entries.length) {
-    els.emptyState.style.display = "block";
-    return;
+    // Create a virtual group for today even with no entries
+    const today = new Date();
+    const todayKey = today.getFullYear() + "-" + pad2(today.getMonth() + 1) + "-" + pad2(today.getDate());
+    groups = [{ dayKey: todayKey, items: [] }];
+    els.emptyState.style.display = "none";
+  } else {
+    els.emptyState.style.display = "none";
+    groups = groupByDay(entries);
   }
-  els.emptyState.style.display = "none";
-
-  const groups = groupByDay(entries);
+  
   for (const g of groups) {
     const groupEl = el("div", { class: "dayGroup" });
     const isExpanded = expandedDayKey === g.dayKey;
@@ -262,8 +303,22 @@ async function refreshList() {
     
     const entriesContainer = el("div", { class: "dayEntries" + (isExpanded ? "" : " collapsed") });
     for (const entry of g.items) entriesContainer.appendChild(renderEntryCard(entry));
-    groupEl.appendChild(entriesContainer);
     
+    // Add "No entries" text with + button when expanded and no entries
+    if (isExpanded && g.items.length === 0) {
+      const emptyRow = el("div", { class: "emptyEntryRow" }, [
+        el("span", { text: "No entries" }),
+        el("button", {
+          class: "addEntryBtn",
+          text: "+",
+          type: "button",
+          onClick: () => openEntryDialog()
+        })
+      ]);
+      entriesContainer.appendChild(emptyRow);
+    }
+    
+    groupEl.appendChild(entriesContainer);
     els.entries.appendChild(groupEl);
   }
 }
@@ -286,15 +341,24 @@ function resetForm() {
 function showPhotoPreview() {
   els.photoPreview.innerHTML = "";
   currentPhotoFiles.forEach((file, idx) => {
-    // Handle both File objects and stored photo objects with { blob, type }
-    const blobToUse = file.blob || file;
-    const url = URL.createObjectURL(blobToUse);
+    // Handle both File objects and stored photo objects with { data, type }
+    let url;
+    if (file.data) {
+      // Already converted to base64
+      url = file.data;
+    } else {
+      // File object, create temporary URL
+      url = URL.createObjectURL(file);
+    }
+    
     const chip = document.createElement("div");
     chip.className = "photoChip";
 
     const img = document.createElement("img");
     img.src = url;
-    img.onload = () => URL.revokeObjectURL(url);
+    if (!file.data) {
+      img.onload = () => URL.revokeObjectURL(url);
+    }
 
     const remove = document.createElement("button");
     remove.type = "button";
@@ -311,8 +375,17 @@ function showPhotoPreview() {
 }
 
 async function fileToBlobRecord(file) {
-  const blob = file.slice(0, file.size, file.type || "image/jpeg");
-  return { blob, type: file.type || "image/jpeg" };
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve({
+        data: reader.result,
+        type: file.type || "image/jpeg"
+      });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 function openEntryDialog() {
@@ -322,7 +395,9 @@ function openEntryDialog() {
   els.capturedAt.value = toDatetimeLocalValue(now);
   els.capturedAtPretty.textContent = formatPretty(now);
   document.querySelector(".formTitle").textContent = "New Entry";
-  els.entryDialog.showModal();
+  els.entryDialog.classList.add("open");
+  document.body.style.overflow = "hidden";
+  document.body.style.overflowX = "hidden";
 }
 
 async function openEntryDialogForEdit(entry) {
@@ -344,11 +419,15 @@ async function openEntryDialogForEdit(entry) {
   
   showPhotoPreview();
   document.querySelector(".formTitle").textContent = "Edit Entry";
-  els.entryDialog.showModal();
+  els.entryDialog.classList.add("open");
+  document.body.style.overflow = "hidden";
+  document.body.style.overflowX = "hidden";
 }
 
 function closeEntryDialog() {
-  els.entryDialog.close();
+  els.entryDialog.classList.remove("open");
+  document.body.style.overflow = "auto";
+  document.body.style.overflowX = "auto";
 }
 
 function openExportDialog() {
@@ -369,15 +448,19 @@ async function saveEntry() {
   const capturedAt = fromDatetimeLocalValue(els.capturedAt.value).toISOString();
 
   const photos = [];
+  console.log("Processing photos, count:", currentPhotoFiles.length);
   for (const f of currentPhotoFiles) {
-    if (f.blob) {
-      // Existing photo from database
+    if (f.data) {
+      // Existing photo from database (already base64)
+      console.log("Adding existing photo");
       photos.push(f);
     } else {
       // New file upload
+      console.log("Converting new file:", f.name, f.size, f.type);
       photos.push(await fileToBlobRecord(f));
     }
   }
+  console.log("Photos processed:", photos.length);
 
   const entry = {
     capturedAt,
@@ -416,6 +499,17 @@ async function deleteEntry(id) {
   setStatus("Entry deleted");
 }
 
+async function duplicateEntry(entry) {
+  const db = await dbPromise;
+  const copy = { ...entry };
+  delete copy.id;
+  // Stamp with current time to surface new duplicate at top
+  copy.capturedAt = new Date().toISOString();
+  await db.add(STORE, copy);
+  await refreshList();
+  setStatus("Entry duplicated");
+}
+
 function wrapText(doc, text, maxWidth) {
   const safe = text ? String(text) : "";
   return doc.splitTextToSize(safe, maxWidth);
@@ -452,7 +546,8 @@ async function exportPdf(days) {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const entries = all
     .filter(e => new Date(e.capturedAt).getTime() >= cutoff)
-    .sort((a, b) => new Date(a.capturedAt) - new Date(b.capturedAt));
+    // Newest to oldest so recent days are first
+    .sort((a, b) => new Date(b.capturedAt) - new Date(a.capturedAt));
 
   if (!entries.length) {
     setStatus("No entries in that range");
@@ -463,7 +558,7 @@ async function exportPdf(days) {
 
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  const margin = 10;
+  const margin = 8;
   const contentW = pageW - margin * 2;
 
   let y = margin;
@@ -483,130 +578,182 @@ async function exportPdf(days) {
   doc.line(margin, y, pageW - margin, y);
   y += 6;
 
+  // Group by day (newest day first)
+  const dayMap = new Map();
   for (const e of entries) {
     const dt = new Date(e.capturedAt);
+    const key = dt.getFullYear() + "-" + pad2(dt.getMonth() + 1) + "-" + pad2(dt.getDate());
+    if (!dayMap.has(key)) dayMap.set(key, []);
+    dayMap.get(key).push(e);
+  }
+  const dayKeys = Array.from(dayMap.keys()).sort((a, b) => (a < b ? 1 : -1));
 
-    const header = `${formatPretty(dt)}   ${e.mealName || ""}`.trim();
+  const formatDayShort = (dayKey) => {
+    const [y, m, d] = dayKey.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    const weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${weekdays[dt.getDay()]} ${months[dt.getMonth()]} ${d}`;
+  };
+
+  for (const dayKey of dayKeys) {
+    const dayEntries = dayMap.get(dayKey);
+
+    // Day header
+    if (y > pageH - margin - 10) {
+      doc.addPage();
+      y = margin;
+    }
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
+    doc.text(formatDayShort(dayKey), margin, y);
+    y += 4;
 
-    if (y > pageH - margin - 10) {
-      doc.addPage();
-      y = margin;
-    }
-    doc.text(header, margin, y);
-    y += 5;
+    for (const e of dayEntries) {
+      const dt = new Date(e.capturedAt);
+      const entryHeader = `${e.mealName || "Meal"} @ ${formatTime(dt)}`;
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-
-    const rows = [
-      ["Dish & Components", e.dishComponents],
-      ["Place", e.place],
-      ["Eating Disorder Behaviors", e.edBehaviors],
-      ["Feelings or Emotions", e.feelings],
-      ["Comments", e.comments]
-    ].filter(r => String(r[1] || "").trim().length);
-
-    // Layout: left column for details, right columns for photos horizontally
-    const leftColW = 70;
-    const leftColX = margin;
-    const rightColX = margin + leftColW + 3;
-    const rightColW = pageW - rightColX - margin;
-    
-    let detailsY = y;
-    let maxY = y;
-
-    // Render details on the left - field name on one line, value on next
-    for (const [k, v] of rows) {
-      const lines = wrapText(doc, v, leftColW);
-      const rowH = 5 + Math.max(4, lines.length * 4);
-
-      if (detailsY + rowH > pageH - margin - 6) {
-        doc.addPage();
-        detailsY = margin;
-        maxY = margin;
-      }
+      const entryIndent = 6;
+      const entryX = margin + entryIndent;
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.text(k + ":", leftColX, detailsY);
-      detailsY += 4;
-      
+      doc.setFontSize(10);
+
+      if (y > pageH - margin - 10) {
+        doc.addPage();
+        y = margin;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.text(formatDayShort(dayKey), margin, y);
+        y += 5;
+      }
+      doc.text(entryHeader, entryX, y);
+      y += 4;
+
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
-      doc.text(lines, leftColX, detailsY);
-      detailsY += Math.max(4, lines.length * 4);
-      maxY = Math.max(maxY, detailsY);
-    }
 
-    // Add fullness scales side by side
-    const fullnessRows = [];
-    if (e.fullnessBefore) fullnessRows.push(["Fullness Before", String(e.fullnessBefore)]);
-    if (e.fullnessAfter) fullnessRows.push(["Fullness After", String(e.fullnessAfter)]);
-    
-    if (fullnessRows.length > 0) {
-      const colW = leftColW / 2;
-      let fullX = leftColX;
-      const fullY = detailsY;
+      const rows = [
+        ["Dish & Components", e.dishComponents],
+        ["Place", e.place],
+        ["Eating Disorder Behaviors", e.edBehaviors],
+        ["Feelings or Emotions", e.feelings],
+        ["Comments", e.comments]
+      ].filter(r => String(r[1] || "").trim().length);
+
+      // Layout: left column for details, right columns for photos horizontally
+      const leftColW = 70;
+      const leftColX = entryX;
+      const rightColX = entryX + leftColW + 3;
+      const rightColW = pageW - rightColX - margin;
       
-      for (const [k, v] of fullnessRows) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
-        doc.text(k + ":", fullX, fullY);
-        
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        doc.text(v, fullX, fullY + 4);
-        
-        fullX += colW;
-      }
-      
-      detailsY += 12;
-      maxY = Math.max(maxY, detailsY);
-    }
+      let detailsY = y;
+      let maxY = y;
 
-    // Render photos on the right, arranged horizontally
-    if (e.photos && e.photos.length) {
-      const photosStartY = y;
-      const maxPhotoH = 45;
-      let photoX = rightColX;
-      
-      for (const p of e.photos) {
-        const dataUrl = await blobToJpegDataUrl(p.blob);
-        const imgProps = doc.getImageProperties(dataUrl);
+      // Render details on the left - field name on one line, value on next
+      for (const [k, v] of rows) {
+        const lines = wrapText(doc, v, leftColW);
+        const rowH = 4 + Math.max(3, lines.length * 3);
 
-        const ratio = Math.min(rightColW / (e.photos.length * imgProps.width), maxPhotoH / imgProps.height);
-
-        const iw = imgProps.width * ratio;
-        const ih = imgProps.height * ratio;
-
-        // Check if we need a new page
-        if (photoX + iw > pageW - margin) {
+        if (detailsY + rowH > pageH - margin - 6) {
           doc.addPage();
-          photoX = rightColX;
           detailsY = margin;
           maxY = margin;
-          detailsY = y;
+          // Re-print day + entry header after page break
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(12);
+          doc.text(formatDayShort(dayKey), margin, detailsY);
+          detailsY += 5;
+          doc.setFontSize(11);
+          doc.text(entryHeader, entryX, detailsY);
+          detailsY += 5;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(10);
         }
 
-        doc.addImage(dataUrl, "JPEG", photoX, photosStartY, iw, ih);
-        photoX += iw + 2;
-        maxY = Math.max(maxY, photosStartY + ih);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.text(k + ":", leftColX, detailsY);
+        detailsY += 3;
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.text(lines, leftColX, detailsY);
+        detailsY += Math.max(3, lines.length * 3);
+        maxY = Math.max(maxY, detailsY);
+      }
+
+      // Add fullness scales side by side
+      const fullnessRows = [];
+      if (e.fullnessBefore) fullnessRows.push(["Fullness Before", String(e.fullnessBefore)]);
+      if (e.fullnessAfter) fullnessRows.push(["Fullness After", String(e.fullnessAfter)]);
+      
+      if (fullnessRows.length > 0) {
+        const colW = leftColW / 2;
+        let fullX = leftColX;
+        const fullY = detailsY;
+        
+        for (const [k, v] of fullnessRows) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(8);
+          doc.text(k + ":", fullX, fullY);
+          
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.text(v, fullX, fullY + 3);
+          
+          fullX += colW;
+        }
+        
+        detailsY += 9;
+        maxY = Math.max(maxY, detailsY);
+      }
+
+      // Render photos on the right, arranged horizontally
+      if (e.photos && e.photos.length) {
+        const photosStartY = y;
+        const maxPhotoH = 35;
+        const photoGap = 2;
+        const totalGapWidth = (e.photos.length - 1) * photoGap;
+        const availableWidth = rightColW - totalGapWidth;
+        let photoX = rightColX;
+        
+        for (const p of e.photos) {
+          const dataUrl = p.data;
+          const imgProps = doc.getImageProperties(dataUrl);
+
+          // Calculate width per photo to fit all in one line
+          const widthPerPhoto = availableWidth / e.photos.length;
+          const ratio = Math.min(widthPerPhoto / imgProps.width, maxPhotoH / imgProps.height);
+
+          const iw = imgProps.width * ratio;
+          const ih = imgProps.height * ratio;
+
+          doc.addImage(dataUrl, "JPEG", photoX, photosStartY, iw, ih);
+          photoX += iw + photoGap;
+          maxY = Math.max(maxY, photosStartY + ih);
+        }
+      }
+
+      y = maxY + 3;
+      if (y > pageH - margin - 10) {
+        doc.addPage();
+        y = margin;
       }
     }
 
-    y = maxY + 4;
-    if (y > pageH - margin - 10) {
-      doc.addPage();
-      y = margin;
-    } else {
+    // Separator between days (not between entries)
+    const isLastDay = dayKey === dayKeys[dayKeys.length - 1];
+    if (!isLastDay) {
+      if (y > pageH - margin - 6) {
+        doc.addPage();
+        y = margin;
+      }
       doc.setDrawColor(60);
       doc.line(margin, y, pageW - margin, y);
-      y += 6;
+      y += 4;
     }
   }
-
   doc.save(`food-diary-${days}-days.pdf`);
   setStatus("PDF saved");
 }
@@ -656,11 +803,13 @@ function wireEvents() {
     ev.preventDefault();
     setStatus("");
     try {
+      console.log("Starting save, photo count:", currentPhotoFiles.length);
       await saveEntry();
       closeEntryDialog();
       await refreshList();
       setStatus(currentEditingId ? "Entry updated" : "Saved");
     } catch (err) {
+      console.error("Save error:", err);
       setStatus(err && err.message ? err.message : "Could not save");
     }
   });
