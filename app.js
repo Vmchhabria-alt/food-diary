@@ -647,29 +647,42 @@ async function exportPdf(days) {
       const rightColX = entryX + leftColW + 3;
       const rightColW = pageW - rightColX - margin;
       
+      // Calculate approximate height needed for this entry
+      let estimatedHeight = 0;
+      for (const [k, v] of rows) {
+        const lines = wrapText(doc, v, leftColW);
+        estimatedHeight += 4 + Math.max(3, lines.length * 3);
+      }
+      // Add fullness rows height
+      const fullnessCount = [e.fullnessBefore, e.fullnessAfter].filter(Boolean).length;
+      if (fullnessCount > 0) estimatedHeight += 9;
+      // Add photos height
+      if (e.photos && e.photos.length) estimatedHeight += 35;
+      
+      // If entry won't fit on current page, start a new page
+      if (y + estimatedHeight > pageH - margin - 10) {
+        doc.addPage();
+        y = margin;
+        // Re-print day header after page break
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.text(formatDayShort(dayKey), margin, y);
+        y += 4;
+        // Re-print entry header
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.text(entryHeader, entryX, y);
+        y += 4;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+      }
+      
       let detailsY = y;
       let maxY = y;
 
       // Render details on the left - field name on one line, value on next
       for (const [k, v] of rows) {
         const lines = wrapText(doc, v, leftColW);
-        const rowH = 4 + Math.max(3, lines.length * 3);
-
-        if (detailsY + rowH > pageH - margin - 6) {
-          doc.addPage();
-          detailsY = margin;
-          maxY = margin;
-          // Re-print day + entry header after page break
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(12);
-          doc.text(formatDayShort(dayKey), margin, detailsY);
-          detailsY += 5;
-          doc.setFontSize(11);
-          doc.text(entryHeader, entryX, detailsY);
-          detailsY += 5;
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(10);
-        }
 
         doc.setFont("helvetica", "bold");
         doc.setFontSize(8);
