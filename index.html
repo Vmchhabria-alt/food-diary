@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#111111" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1e3a8a" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
@@ -15,7 +15,7 @@
       <div class="title">Self Monitoring Tool</div>
       <div class="subtitle">Powered by Le Crumb</div>
     </div>
-    <button id="openNewEntry" class="primary">Capture New Entry</button>
+    <button id="openNewEntry" class="primary">+</button>
   </header>
 
   <main class="container">
@@ -27,12 +27,12 @@
   </main>
 
   <footer class="bottombar">
-    <button id="exportPdf" class="secondary">Export PDF</button>
     <div id="status" class="status" aria-live="polite"></div>
+    <button id="exportPdf" class="secondary">Export PDF</button>
   </footer>
 
   <dialog id="entryDialog" class="dialog">
-    <form id="entryForm" method="dialog" class="form">
+    <form id="entryForm" class="form">
       <div class="formHeader">
         <div class="formTitle">New Entry</div>
         <button type="button" id="closeDialog" class="iconBtn" aria-label="Close">×</button>
@@ -47,7 +47,7 @@
       <div class="field">
         <div class="row">
           <label>Meal Photos</label>
-          <span class="hint">Optional, you can add multiple</span>
+          <span class="hint">Optional, add up to 3 images</span>
         </div>
         <input id="photos" type="file" accept="image/*" multiple />
         <div id="photoPreview" class="photoGrid"></div>
